@@ -54,12 +54,24 @@ func getZoopla(filter string){
             totalPages = getTotalPages(document)
         }
         fullIdList = append(fullIdList, getIdList(document )... )
-        log.Print(fullIdList)
+        log.Print("=============================================\n", fullIdList)
         if pageNo == totalPages {
             break
+        } else {
+            pageNo++
         }
     }
+    //Should I save the ID list?
+    for _, page := range fullIdList {
+        extractPage(page)
+    }
 }
+
+func extractPage(pageId int64) {
+    var url = fmt.Sprintf("https://www.zoopla.co.uk/for-sale/details/%d",pageId)
+
+}
+
 
 func getIdList(documment *goquery.Document) (getIdList []int64){
     documment.Find("ul.listing-results").Each(func(index int, elementList *goquery.Selection) {
