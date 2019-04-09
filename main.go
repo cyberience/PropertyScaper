@@ -110,7 +110,7 @@ func extractZooPage(pageId int64) {
         section.Find("h4.ui-agent__name").Each(func(index int, element *goquery.Selection) {
             Property.agent = element.Text()
         })
-        section.Find("h4.ui-agent__address").Each(func(index int, element *goquery.Selection) {
+        section.Find("address.ui-agent__address").Each(func(index int, element *goquery.Selection) {
             Property.agentadd = element.Text()
         })
         section.Find("p.ui-agent__tel").Each(func(index int, element *goquery.Selection) {
