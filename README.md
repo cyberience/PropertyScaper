@@ -1,8 +1,16 @@
 # PropertyScaper
 
-Run python
+Golang Scraper for Property
 
-execute the following
+Requirements are as follows:
+
+goquery for the web tools and sqlit for the database sqlite driver mayt have a problem if you use an older version of golang
+```
+github.com/PuerkitoBio/goquery
+go get github.com/mattn/go-sqlite3
+go get golang.org/x/text/currency
+```
+
 
 ```
 from rightmove_webscraper import rightmove_data
@@ -12,9 +20,3 @@ rightmove_object = rightmove_data(url)
 
 The following commands work
 
-
-rightmove_object.average_price
-rightmove_object.results_count
-rightmove_object.get_results
-rightmove_object.summary()
-rightmove_object.summary(by = "postcode")
