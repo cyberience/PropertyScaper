@@ -4,7 +4,7 @@ Golang Scraper for Property
 
 Requirements are as follows:
 
-goquery for the web tools and sqlit for the database sqlite driver mayt have a problem if you use an older version of golang.
+goquery for the web tools and sqlite for the database sqlite driver mayt have a problem if you use an older version of golang.
 To update Go use:
 ```
 curl -o go.pkg https://dl.google.com/go/go1.11.1.darwin-amd64.pkg
