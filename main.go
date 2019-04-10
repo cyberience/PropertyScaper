@@ -30,13 +30,15 @@ type property struct {
     agentNo string
     history string
     url string
+    averageVal int64
+    estimatedRent int64
 }
 
 var Property property
 var waitGroup sync.WaitGroup //to ensue the download is complete before next file
 
 func main() {
-//    makeDB()
+    makeDB()
 //    getPages("All")
     extractZooPage(40630072)
 }
@@ -136,6 +138,21 @@ func extractZooPage(pageId int64) {
                 Property.description = strings.TrimSpace(details.Text())
             })
         })
+        section.Find("section#market-stats-tab").Each(func(index int, element *goquery.Selection) {
+            element.Find("ul.dp-market-stats__price-list").Each(func(index int, list *goquery.Selection) {
+                element.Find("li.dp-market-stats__price-list-item").Each(func(index int, line *goquery.Selection) {
+                    line.Find("span.dp-market-stats__price").Each(func(index int, item *goquery.Selection) {
+                        Property.averageVal, _ = strconv.ParseInt(reg.ReplaceAllString(item.Text(), ""), 0, 64)
+                    })
+                })
+            })
+            element.Find("div.dp-market-stats--border-top").Each(func(index int, list *goquery.Selection) {
+                list.Find("span.dp-market-stats__price").Each(func(index int, item *goquery.Selection) {
+                    Property.estimatedRent, _ = strconv.ParseInt(reg.ReplaceAllString(item.Text(), ""), 0, 64)
+                })
+            })
+        })
+
     })
     document.Find("div.ui-layout__halves").Each(func(index int, section *goquery.Selection) {
         section.Find("section.dp-price-history-block").Each(func(index int, element *goquery.Selection) {
@@ -152,6 +169,7 @@ func extractZooPage(pageId int64) {
             })
         })
     })
+    saveData(Property)
     outputCsv(Property)
 
 }
@@ -172,7 +190,9 @@ func outputCsv(row property) {
     outFile += `"`+ row.agentadd + `",`
     outFile += `"`+ row.agentNo + `",`
     outFile += `"`+ row.history + `",`
-    outFile += `"`+ row.url + `"`
+    outFile += `"`+ row.url + `",`
+    outFile += `"`+ strconv.FormatInt( row.averageVal ,10) + `",`
+    outFile += `"`+ strconv.FormatInt( row.estimatedRent ,10) + `"`
     log.Print(outFile)
     writeFile(outFile)
 }
@@ -208,7 +228,25 @@ func makeDB() {
     if !exists("./properties.db") {
         db, err := sql.Open("sqlite3", "./properties.db")
         checkErr(err)
-        stmt, err := db.Prepare("CREATE TABLE `properties` ( `uid` INTEGER PRIMARY KEY AUTOINCREMENT, `pid` VARCHAR(64) NULL, `site` VARCHAR(64) NULL,`created` DATE NULL ) ")
+        stmt, err := db.Prepare("CREATE TABLE `properties` (" +
+            " `uid` INTEGER PRIMARY KEY AUTOINCREMENT," +
+            "`id`           INTEGER, " +
+            "`title`        VARCHAR(64) NULL, " +
+            "`price`        INTEGER, " +
+            "`address`      VARCHAR(64) NULL, " +
+            "`postcode`     VARCHAR(64) NULL, " +
+            "`bedrooms`     INTEGER, " +
+            "`bathrooms`    INTEGER, " +
+            "`receptions`   INTEGER, " +
+            "`description`  VARCHAR(64) NULL, " +
+            "`agent`        VARCHAR(64) NULL, " +
+            "`agentadd`     VARCHAR(64) NULL, " +
+            "`agentNo`      VARCHAR(64) NULL, " +
+            "`history`      VARCHAR(64) NULL, " +
+            "`url`          VARCHAR(64) NULL, " +
+            "`averageVal`   INTEGER, " +
+            "`estimatedRent` INTEGER," +
+            "`created`      DATE NULL ) " )
         checkErr(err)
         res, err := stmt.Exec()
         checkErr(err)
@@ -217,6 +255,24 @@ func makeDB() {
         log.Println(id)
         db.Close()
     }
+}
+
+func saveData(p property) (saveData bool){
+    defer func() {
+        r := recover()
+        if r != nil { log.Println("Request Disconnection ignored:", r) }
+    }()
+    db, err := sql.Open("sqlite3", "./properties.db")
+    checkErr(err)
+    stmt , err := db.Prepare("INSERT INTO properties(id, title, price, address, postcode, bedrooms, bathrooms, receptions, description, agent, agentadd, agentNo, history, url, averageVal, estimatedRent ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,DateTime('now'))")
+    checkErr(err)
+    res, err := stmt.Exec(p.id,p.title,p.price,p.address,p.postcode,p.bedrooms,p.bathrooms,p.receptions,p.description,p.agent,p.agentadd,p.agentNo,p.history,p.url,p.averageVal)
+    checkErr(err)
+    affect, err := res.RowsAffected()
+    checkErr(err)
+    log.Print(affect)
+    db.Close()
+    return true
 }
 
 func pullUrl(_url string) (*goquery.Document, error ) {
