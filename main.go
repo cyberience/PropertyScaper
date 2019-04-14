@@ -1,9 +1,15 @@
 package main
+// ToDo: Check ID exist so skip writing
+// ToDo: Mark records as sold but check first save rewriting
+// ToDo: Apply Filters for specific conditions. Post Code, City, Price,
+// ToDo: Add paramters to the application.
+// ToDo: Add rightMove, and some others to the list.
 
 import (
     "database/sql"
     "fmt"
     "github.com/PuerkitoBio/goquery"
+    _ "github.com/mattn/go-sqlite3"
     "log"
     "net/http"
     "os"
@@ -12,7 +18,6 @@ import (
     "strings"
     "sync"
     "time"
-    _ "github.com/mattn/go-sqlite3"
 )
 
 type property struct {
@@ -32,6 +37,7 @@ type property struct {
     url string
     averageVal int64
     estimatedRent int64
+    sold bool
 }
 
 var Property property
@@ -62,7 +68,7 @@ func getZoopla(filter string){
     pageNo , totalPages := 1 , 0
     var fullIdList []int64
     for {
-        var url = fmt.Sprintf("https://www.zoopla.co.uk/for-sale/houses/manchester/?q=Manchester&radius=0&results_sort=newest_listings&search_source=refine&pn=%d",pageNo)
+        var url = fmt.Sprintf("https://www.zoopla.co.uk/for-sale/houses/manchester/?q=Manchester&radius=0&results_sort=newest_listings&search_source=refine&include_sold=true&pn=%d",pageNo)
         document, err := pullUrl(url)
         if err != nil{log.Println("Error loading HTTP response body. ")}
         if pageNo == 1 { // Get a page count on the first load
@@ -78,9 +84,9 @@ func getZoopla(filter string){
     log.Print("====================================================================\n","Pages",totalPages,"\n", fullIdList)
     //Should I save the ID list?
     for _, propPage := range fullIdList {
-        //Check the ID has not already been found
-        extractZooPage(propPage)
-        // save the record here to DB
+       //Check the ID has not already been found
+       extractZooPage(propPage)
+       // save the record here to DB
     }
 }
 
@@ -90,6 +96,7 @@ func extractZooPage(pageId int64) {
         r := recover()
         if r != nil { log.Println("Request Disconnection ignored:", r) }
     }()
+    Property = property{}
     Property.id = pageId
     var url = fmt.Sprintf("https://www.zoopla.co.uk/for-sale/details/%d",pageId)
     Property.url = url
@@ -152,7 +159,6 @@ func extractZooPage(pageId int64) {
                 })
             })
         })
-
     })
     document.Find("div.ui-layout__halves").Each(func(index int, section *goquery.Selection) {
         section.Find("section.dp-price-history-block").Each(func(index int, element *goquery.Selection) {
@@ -193,6 +199,7 @@ func outputCsv(row property) {
     outFile += `"`+ row.url + `",`
     outFile += `"`+ strconv.FormatInt( row.averageVal ,10) + `",`
     outFile += `"`+ strconv.FormatInt( row.estimatedRent ,10) + `"`
+    outFile += `"`+ strconv.FormatBool(row.sold) + `"`
     log.Print(outFile)
     writeFile(outFile)
 }
@@ -204,6 +211,9 @@ func getIdZooList(document *goquery.Document) (getIdList []int64){
             if valid {
                 idValue ,_ := strconv.ParseInt(itemId,0,64)
                 getIdList = append(getIdList,idValue)
+                element.Find("span.status-text-sold").Each(func(index int, element *goquery.Selection) {
+                    log.Print("Mark as Sold:",idValue)
+                })
             }
         })
     })
@@ -264,9 +274,11 @@ func saveData(p property) (saveData bool){
     }()
     db, err := sql.Open("sqlite3", "./properties.db")
     checkErr(err)
-    stmt , err := db.Prepare("INSERT INTO properties(id, title, price, address, postcode, bedrooms, bathrooms, receptions, description, agent, agentadd, agentNo, history, url, averageVal, estimatedRent ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,DateTime('now'))")
+    //stmt , err := db.Prepare("INSERT INTO properties(id, title, price, address, postcode, bedrooms, bathrooms, receptions, description, agent, agentadd, agentNo, history, url, averageVal, estimatedRent ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,DateTime('now'))")
+    stmt , err := db.Prepare("INSERT INTO properties(id, title, price, address, postcode, bedrooms, bathrooms, receptions, description, agent, agentadd, agentNo, history, url, averageVal, estimatedRent, created ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,date('now'))")
     checkErr(err)
-    res, err := stmt.Exec(p.id,p.title,p.price,p.address,p.postcode,p.bedrooms,p.bathrooms,p.receptions,p.description,p.agent,p.agentadd,p.agentNo,p.history,p.url,p.averageVal)
+    // res, err := stmt.Exec(p.id,p.title,p.price,p.address,p.postcode,p.bedrooms,p.bathrooms,p.receptions,p.description,p.agent,p.agentadd,p.agentNo,p.history,p.url,p.averageVal)
+    res, err := stmt.Exec(p.id,p.title,p.price,p.address,p.postcode,p.bedrooms,p.bathrooms,p.receptions,p.description,p.agent,p.agentadd,p.agentNo,p.history,p.url,p.averageVal, p.estimatedRent)
     checkErr(err)
     affect, err := res.RowsAffected()
     checkErr(err)
@@ -274,6 +286,27 @@ func saveData(p property) (saveData bool){
     db.Close()
     return true
 }
+
+func saveSold(p property) (saveData bool){
+    defer func() {
+        r := recover()
+        if r != nil { log.Println("Can set Sold:", r) }
+    }()
+    db, err := sql.Open("sqlite3", "./properties.db")
+    checkErr(err)
+    stmt , err := db.Prepare("UPDATE properties SET sold=? WHERE id=?")
+    checkErr(err)
+    // res, err := stmt.Exec(p.id,p.title,p.price,p.address,p.postcode,p.bedrooms,p.bathrooms,p.receptions,p.description,p.agent,p.agentadd,p.agentNo,p.history,p.url,p.averageVal)
+    res, err := stmt.Exec(true,p.id)
+    checkErr(err)
+    affect, err := res.RowsAffected()
+    checkErr(err)
+    log.Print(affect)
+    db.Close()
+    return true
+}
+
+
 
 func pullUrl(_url string) (*goquery.Document, error ) {
     client := &http.Client{Timeout:30 * time.Second}
